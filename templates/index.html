@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DermaAlpha — AI Dermatology Assistant</title>
+  <meta name="description" content="AI-powered dermatology analysis with patient history tracking.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/static/css/style.css">
+  <!-- Chart.js for severity trend chart -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ── App Shell ──────────────────────────────────────────────────────────── -->
+<div id="app">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-mark">🔬</div>
+        <div>
+          <div class="logo-text">DermaAlpha</div>
+          <div class="logo-tagline">AI Dermatology Assistant</div>
+        </div>
+      </div>
+      <code id="header-patient-badge" class="header-badge font-mono"></code>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 1 — Welcome / Patient Identification
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div id="screen-1" class="screen">
+    <div class="welcome-screen">
+
+      <!-- Hero -->
+      <div class="welcome-hero">
+        <h1>Skin Intelligence,<br>Powered by AI</h1>
+        <p>Upload a photo of your skin concern and receive an expert-grade
+           dermatology assessment — with memory of your complete medical history.</p>
+      </div>
+
+      <!-- Login Card -->
+      <div class="welcome-card">
+        <div class="stack--lg">
+
+          <div>
+            <div class="form-label" style="margin-bottom: 12px;">How would you like to proceed?</div>
+            <div class="radio-group">
+              <label class="radio-option" id="opt-new">
+                <input type="radio" name="patient-type" value="new" checked>
+                <div class="radio-dot"></div>
+                <div>
+                  <div class="radio-label-text">New Patient</div>
+                  <div class="radio-label-sub">Register &amp; get a Patient ID</div>
+                </div>
+              </label>
+              <label class="radio-option" id="opt-returning">
+                <input type="radio" name="patient-type" value="returning">
+                <div class="radio-dot"></div>
+                <div>
+                  <div class="radio-label-text">Returning Patient</div>
+                  <div class="radio-label-sub">Enter your existing ID</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- ID Input (hidden for new patients) -->
+          <div id="id-input-wrapper" class="form-group" style="display:none;">
+            <label class="form-label">Patient ID</label>
+            <div class="id-input-group">
+              <span class="id-prefix">PT-</span>
+              <input type="text"
+                     id="patient-id-input"
+                     placeholder="ABC123"
+                     maxlength="10"
+                     autocomplete="off"
+                     spellcheck="false">
+            </div>
+            <span class="text-xs text-muted">Enter the ID you received at your first visit.</span>
+          </div>
+
+          <!-- Generated ID display (shown after new patient creation) -->
+          <div id="generated-id-box" style="display:none;"
+               class="card card--elevated" style="border-color: var(--accent);">
+            <div class="form-label" style="color: var(--accent); margin-bottom: 8px;">
+              ✓ Your Patient ID
+            </div>
+            <code id="generated-id-value" class="font-mono"
+                  style="font-size: 26px; font-weight: 700; color: var(--accent); letter-spacing: 0.08em;"></code>
+            <p class="text-xs text-muted" style="margin-top: 8px;">
+              Save this ID — you will need it for future visits.
+            </p>
+          </div>
+
+          <button id="begin-btn" class="btn btn--accent btn--lg btn--full">
+            Begin Consultation
+          </button>
+
+        </div>
+      </div>
+
+      <!-- Feature pills -->
+      <div class="welcome-features">
+        <div class="feature-pill"><span class="dot"></span> Image Analysis</div>
+        <div class="feature-pill"><span class="dot"></span> Medical History</div>
+        <div class="feature-pill"><span class="dot"></span> Progress Tracking</div>
+        <div class="feature-pill"><span class="dot"></span> Treatment Plans</div>
+      </div>
+
+      <p class="disclaimer">
+        DermaAlpha is an AI-assisted tool and does not replace a licensed dermatologist.
+        Always seek professional medical advice for skin conditions.
+      </p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 2 — Consultation Form
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div id="screen-2" class="screen">
+    <div class="consult-screen">
+      <div class="container">
+
+        <!-- Page header -->
+        <div style="display:flex; align-items:center; justify-content:space-between;
+                    margin-bottom: 28px; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h2 style="font-size:22px; font-weight:700; margin-bottom:4px;">New Consultation</h2>
+            <p id="consult-subtitle" class="text-muted text-sm">Please provide your details below.</p>
+          </div>
+          <button id="back-btn" class="btn btn--ghost btn--sm">← Back</button>
+        </div>
+
+        <div class="consult-grid">
+
+          <!-- LEFT: Image Upload -->
+          <div class="stack">
+            <div class="card">
+              <div class="card__title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+                Skin Image
+              </div>
+
+              <div id="drop-zone" class="drop-zone">
+                <!-- Default state -->
+                <div id="drop-zone-content">
+                  <div class="drop-zone-icon">🩻</div>
+                  <div class="drop-zone-text">Drop your image here</div>
+                  <div class="drop-zone-hint">or click to select a file</div>
+                  <div class="drop-zone-formats">
+                    <span class="format-pill">JPG</span>
+                    <span class="format-pill">PNG</span>
+                    <span class="format-pill">WEBP</span>
+                    <span class="format-pill">BMP</span>
+                  </div>
+                </div>
+
+                <!-- Preview state -->
+                <div id="image-preview-wrapper" style="display:none;">
+                  <div style="position:relative; display:inline-block;">
+                    <img id="image-preview" class="image-preview" alt="Skin image preview">
+                    <button id="image-remove-btn" class="image-remove-btn" title="Remove image">✕</button>
+                  </div>
+                  <span id="image-filename" class="image-filename"></span>
+                </div>
+              </div>
+              <input type="file" id="image-input" accept="image/*" style="display:none;">
+
+              <p class="text-xs text-muted" style="margin-top:10px; line-height:1.6;">
+                For best results, use a clear, well-lit close-up photo of the affected area.
+                Image is sent securely and not stored permanently.
+              </p>
+            </div>
+
+            <!-- Tips card -->
+            <div class="card card--elevated">
+              <div class="card__title">📋 Photography Tips</div>
+              <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+                <li class="text-sm text-muted">→ Use natural or bright white lighting</li>
+                <li class="text-sm text-muted">→ Hold the camera 10–15 cm from skin</li>
+                <li class="text-sm text-muted">→ Keep the image in focus</li>
+                <li class="text-sm text-muted">→ Include a 3–5 cm area around the lesion</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- RIGHT: Complaint + History -->
+          <div class="stack">
+
+            <!-- Chief Complaint -->
+            <div class="card">
+              <div class="card__title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                Chief Complaint <span style="color:var(--sev-high)">*</span>
+              </div>
+              <div class="form-group">
+                <textarea
+                  id="complaint-textarea"
+                  class="form-textarea"
+                  placeholder="Describe your skin concern in detail. Include: location, duration, symptoms (itching, pain, scaling, colour change), and any recent changes or triggers..."
+                  rows="6"
+                  maxlength="1000"
+                ></textarea>
+                <div class="char-count">
+                  <span id="complaint-char-count" class="text-muted">0 / 1000</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Structured Intake (new patients) / hidden for returning patients -->
+            <div id="history-accordion-wrapper">
+
+              <!-- Hidden textarea — populated by JS from structured answers before submit -->
+              <textarea id="medical-history-textarea" style="display:none;"></textarea>
+              <!-- Dummy element kept so existing JS references don't break -->
+              <details id="history-accordion" style="display:none;"></details>
+
+              <!-- ── Structured Intake Form ─────────────────────────────── -->
+              <div id="structured-intake" class="structured-intake">
+
+                <!-- Section 1: About Your Condition -->
+                <div class="intake-section">
+                  <div class="intake-section-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    About Your Condition
+                  </div>
+
+                  <div class="intake-question">
+                    <div class="intake-q-label">How long have you had this?</div>
+                    <div class="intake-chips">
+                      <label class="intake-chip"><input type="radio" name="duration" value="Less than 1 week"><span>&#60; 1 week</span></label>
+                      <label class="intake-chip"><input type="radio" name="duration" value="1–4 weeks"><span>1–4 weeks</span></label>
+                      <label class="intake-chip"><input type="radio" name="duration" value="1–3 months"><span>1–3 months</span></label>
+                      <label class="intake-chip"><input type="radio" name="duration" value="More than 3 months"><span>&#62; 3 months</span></label>
+                      <label class="intake-chip"><input type="radio" name="duration" value="More than 1 year"><span>&#62; 1 year</span></label>
+                    </div>
+                  </div>
+
+                  <div class="intake-question">
+                    <div class="intake-q-label">Symptoms <span class="text-muted text-xs">(select all that apply)</span></div>
+                    <div class="intake-chips">
+                      <label class="intake-chip"><input type="checkbox" name="symptom" value="Itching"><span>🔥 Itching</span></label>
+                      <label class="intake-chip"><input type="checkbox" name="symptom" value="Burning"><span>🌡 Burning</span></label>
+                      <label class="intake-chip"><input type="checkbox" name="symptom" value="Pain"><span>⚡ Pain</span></label>
+                      <label class="intake-chip"><input type="checkbox" name="symptom" value="Bleeding"><span>🩸 Bleeding</span></label>
+                      <label class="intake-chip"><input type="checkbox" name="symptom" value="Scaling / Flaking"><span>❄ Scaling</span></label>
+                      <label class="intake-chip"><input type="checkbox" name="symptom" value="Swelling"><span>💧 Swelling</span></label>
+                      <label class="intake-chip"><input type="checkbox" name="symptom" value="Discharge / Oozing"><span>💦 Discharge</span></label>
+                      <label class="intake-chip"><input type="checkbox" name="symptom" value="No noticeable symptoms"><span>None</span></label>
+                    </div>
+                  </div>
+
+                  <div class="intake-question">
+                    <div class="intake-q-label">Is it spreading?</div>
+                    <div class="intake-chips">
+                      <label class="intake-chip"><input type="radio" name="spreading" value="Yes, spreading rapidly"><span>Yes — rapidly</span></label>
+                      <label class="intake-chip"><input type="radio" name="spreading" value="Yes, spreading slowly"><span>Yes — slowly</span></label>
+                      <label class="intake-chip"><input type="radio" name="spreading" value="No, staying the same"><span>No</span></label>
+                      <label class="intake-chip"><input type="radio" name="spreading" value="Unsure"><span>Unsure</span></label>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section 2: Triggers -->
+                <div class="intake-section">
+                  <div class="intake-section-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    Possible Triggers
+                  </div>
+                  <div class="intake-chips">
+                    <label class="intake-chip"><input type="checkbox" name="trigger" value="Sun / UV exposure"><span>☀ Sun / UV</span></label>
+                    <label class="intake-chip"><input type="checkbox" name="trigger" value="New soap, cosmetic, or skincare product"><span>🧴 New product</span></label>
+                    <label class="intake-chip"><input type="checkbox" name="trigger" value="Stress"><span>😰 Stress</span></label>
+                    <label class="intake-chip"><input type="checkbox" name="trigger" value="Diet change or specific food"><span>🥗 Diet / Food</span></label>
+                    <label class="intake-chip"><input type="checkbox" name="trigger" value="New medication"><span>💊 New medication</span></label>
+                    <label class="intake-chip"><input type="checkbox" name="trigger" value="Heat or sweating"><span>🌊 Heat / Sweat</span></label>
+                    <label class="intake-chip"><input type="checkbox" name="trigger" value="Animal or plant contact"><span>🐾 Animal / Plant</span></label>
+                    <label class="intake-chip"><input type="checkbox" name="trigger" value="Unknown trigger"><span>Unknown</span></label>
+                  </div>
+                </div>
+
+                <!-- Section 3: Your Profile -->
+                <div class="intake-section">
+                  <div class="intake-section-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    Your Profile
+                  </div>
+
+                  <div class="intake-question">
+                    <div class="intake-q-label">Fitzpatrick Skin Type <span class="text-muted text-xs">(affects how conditions appear)</span></div>
+                    <div class="fitz-selector">
+                      <label class="fitz-btn" title="Type I — Very fair, always burns, never tans">
+                        <input type="radio" name="fitzpatrick" value="Type I (very fair, always burns)">
+                        <div class="fitz-swatch" style="background:#fde8d5;"></div>
+                        <span>I</span>
+                      </label>
+                      <label class="fitz-btn" title="Type II — Fair, usually burns, rarely tans">
+                        <input type="radio" name="fitzpatrick" value="Type II (fair, usually burns)">
+                        <div class="fitz-swatch" style="background:#f5cba0;"></div>
+                        <span>II</span>
+                      </label>
+                      <label class="fitz-btn" title="Type III — Medium, sometimes burns, tans gradually">
+                        <input type="radio" name="fitzpatrick" value="Type III (medium, sometimes burns)">
+                        <div class="fitz-swatch" style="background:#d4956a;"></div>
+                        <span>III</span>
+                      </label>
+                      <label class="fitz-btn" title="Type IV — Olive, rarely burns, always tans">
+                        <input type="radio" name="fitzpatrick" value="Type IV (olive, rarely burns)">
+                        <div class="fitz-swatch" style="background:#b5713a;"></div>
+                        <span>IV</span>
+                      </label>
+                      <label class="fitz-btn" title="Type V — Brown, very rarely burns">
+                        <input type="radio" name="fitzpatrick" value="Type V (brown, very rarely burns)">
+                        <div class="fitz-swatch" style="background:#7d4520;"></div>
+                        <span>V</span>
+                      </label>
+                      <label class="fitz-btn" title="Type VI — Dark, never burns">
+                        <input type="radio" name="fitzpatrick" value="Type VI (dark, never burns)">
+                        <div class="fitz-swatch" style="background:#3d1c0a;"></div>
+                        <span>VI</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="intake-question">
+                    <div class="intake-q-label">Current medications <span class="text-muted text-xs">(oral or topical)</span></div>
+                    <input type="text" id="current-meds-input" class="form-input"
+                           placeholder="e.g. antihistamines, moisturiser, birth control…">
+                  </div>
+
+                  <div class="intake-question">
+                    <div class="intake-q-label">Have you tried any treatment for this?</div>
+                    <div class="intake-chips">
+                      <label class="intake-chip"><input type="radio" name="treated" value="No"><span>No</span></label>
+                      <label class="intake-chip"><input type="radio" name="treated" value="Yes"><span>Yes</span></label>
+                    </div>
+                    <div id="treatment-detail-wrapper" style="display:none; margin-top:10px;">
+                      <input type="text" id="treatment-detail-input" class="form-input"
+                             placeholder="What did you try? Did it help?">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section 4: Medical Background -->
+                <div class="intake-section">
+                  <div class="intake-section-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    Medical Background <span class="text-muted text-xs" style="text-transform:none; font-weight:400;">(optional)</span>
+                  </div>
+
+                  <div class="intake-question">
+                    <div class="intake-q-label">Known skin conditions</div>
+                    <input type="text" id="known-conditions-input" class="form-input"
+                           placeholder="e.g. eczema, psoriasis, rosacea…">
+                  </div>
+
+                  <div class="intake-question">
+                    <div class="intake-q-label">Allergies</div>
+                    <input type="text" id="allergies-input" class="form-input"
+                           placeholder="e.g. penicillin, latex, pollen…">
+                  </div>
+
+                  <div class="intake-question">
+                    <div class="intake-q-label">Family history of skin cancer or autoimmune conditions?</div>
+                    <div class="intake-chips">
+                      <label class="intake-chip"><input type="radio" name="family-history" value="Yes"><span>Yes</span></label>
+                      <label class="intake-chip"><input type="radio" name="family-history" value="No"><span>No</span></label>
+                      <label class="intake-chip"><input type="radio" name="family-history" value="Unknown"><span>Unknown</span></label>
+                    </div>
+                  </div>
+                </div>
+
+              </div><!-- /structured-intake -->
+            </div><!-- /history-accordion-wrapper -->
+
+            <!-- Submit -->
+            <button id="analyze-btn" class="btn btn--primary btn--lg btn--full">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              Analyze Condition
+            </button>
+
+            <p class="text-xs text-muted" style="text-align:center; line-height:1.6;">
+              Analysis typically takes 20–60 seconds. Your data is saved securely for future follow-ups.
+            </p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 3 — Analyzing / Loading
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div id="screen-3" class="screen">
+    <div class="loading-screen">
+
+      <!-- Logo pulse -->
+      <div style="text-align:center; animation: float 3s ease-in-out infinite;">
+        <div style="width:80px; height:80px; margin:0 auto;
+                    background: linear-gradient(135deg, var(--accent), var(--primary));
+                    border-radius: 20px;
+                    display:flex; align-items:center; justify-content:center;
+                    font-size:38px;
+                    box-shadow: 0 0 40px var(--primary-glow);">🔬</div>
+      </div>
+
+      <!-- Title -->
+      <div style="text-align:center;">
+        <div class="loading-title">Analyzing Your Condition</div>
+        <div class="loading-subtitle">Gemini AI is reviewing your case…</div>
+        <div class="loading-visual" style="margin: 16px auto 0;"></div>
+        <div class="loading-pulse" style="justify-content:center;">
+          <div class="loading-dot"></div>
+          <div class="loading-dot"></div>
+          <div class="loading-dot"></div>
+        </div>
+      </div>
+
+      <!-- Step list -->
+      <ol class="step-list" id="step-list">
+        <li class="step-item" id="step-0">
+          <div class="step-icon"></div>
+          <span>Uploading image &amp; data</span>
+        </li>
+        <li class="step-item" id="step-1">
+          <div class="step-icon"></div>
+          <span>Consulting Gemini AI</span>
+        </li>
+        <li class="step-item" id="step-2">
+          <div class="step-icon"></div>
+          <span>Generating treatment plan</span>
+        </li>
+        <li class="step-item" id="step-3">
+          <div class="step-icon"></div>
+          <span>Saving to secure memory</span>
+        </li>
+      </ol>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 4 — Results
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div id="screen-4" class="screen">
+    <div class="results-layout">
+
+      <!-- Main Results Column -->
+      <main class="results-main">
+        <div class="results-content">
+
+          <!-- Toolbar -->
+          <div style="display:flex; align-items:center; justify-content:space-between;
+                      margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+            <button id="new-consult-btn" class="btn btn--ghost btn--sm">← New Consultation</button>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button id="download-report-btn" class="btn btn--ghost btn--sm" style="display:none;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                PDF Report
+              </button>
+              <button id="history-toggle-btn" class="btn btn--ghost btn--sm"
+                      aria-expanded="false" aria-controls="history-sidebar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 12h18M3 6h18M3 18h18"/>
+                </svg>
+                History
+              </button>
+            </div>
+          </div>
+
+          <!-- Encounter info bar -->
+          <div class="encounter-info">
+            <span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <span id="enc-date-display">—</span>
+            </span>
+            <span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              <span id="enc-type-display">—</span>
+            </span>
+            <span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07
+                         A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.41
+                         2 2 0 0 1 3.6 1.23h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7
+                         2.81a2 2 0 0 1-.45 2.11L7.91 8.92a16 16 0 0 0 6 6l.92-.92
+                         a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92z"/>
+              </svg>
+              Enc: <span class="highlight" id="enc-id-display">—</span>
+            </span>
+          </div>
+
+          <!-- URGENT BANNER -->
+          <div id="urgent-banner" class="urgent-banner" role="alert">
+            <span class="urgent-icon">🚨</span>
+            <div class="urgent-text">
+              <h3>Urgent — Seek Immediate Medical Attention</h3>
+              <p>This condition may require emergency care. Please visit an emergency
+                 department or contact your doctor right away. Do not delay.</p>
+            </div>
+          </div>
+
+          <!-- Clinical Summary Card -->
+          <div class="card stack--lg" style="margin-bottom: 20px;">
+            <div class="card__title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              Clinical Assessment
+            </div>
+
+            <div class="clinical-grid">
+              <div class="diagnosis-section">
+                <div class="text-label" style="margin-bottom:6px;">Primary Diagnosis</div>
+                <h2 id="diagnosis-title">Loading…</h2>
+                <div class="text-label" style="margin-top: 16px; margin-bottom:8px;">Differential Diagnoses</div>
+                <ul id="differential-list" class="differential-list"></ul>
+              </div>
+
+              <!-- Severity Gauge — all text lives inside the SVG so nothing clips -->
+              <div class="severity-gauge-container">
+                <div class="gauge-label">Severity Score</div>
+                <svg id="severity-gauge"
+                     viewBox="10 10 180 165"
+                     width="200" height="183"
+                     style="overflow:visible; display:block; margin:0 auto;"
+                     aria-label="Severity gauge">
+                  <!-- Arc paths + score text injected by JS -->
+                </svg>
+                <!-- Hidden — values are rendered inside the SVG instead -->
+                <div id="gauge-label-text"    style="display:none;"></div>
+                <div id="gauge-severity-level" style="display:none;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Lesion Classifier Card (shown only when classifier ran) -->
+          <div id="classifier-card" class="card classifier-card" style="display:none; margin-bottom:20px;">
+            <div class="card__title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                <path d="M11 8v6M8 11h6"/>
+              </svg>
+              AI Pre-Classifier
+              <span class="classifier-badge">VISION MODEL</span>
+            </div>
+            <div id="classifier-predictions" class="classifier-predictions"></div>
+            <p class="text-xs text-muted" style="margin-top:8px; line-height:1.6;">
+              Automated visual pre-screening — used as a hint to guide the LLM. Not a clinical diagnosis.
+            </p>
+          </div>
+
+          <!-- Narrative Card -->
+          <div class="card narrative-card stack--lg" style="margin-bottom:20px;">
+            <div class="card__title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+              Full Assessment
+            </div>
+            <div id="narrative-text"></div>
+          </div>
+
+          <!-- Condition Tags -->
+          <div class="card" style="margin-bottom:20px;">
+            <div class="card__title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                <line x1="7" y1="7" x2="7.01" y2="7"/>
+              </svg>
+              Condition Tags &amp; Region
+            </div>
+            <div id="condition-tags" class="tags-container"></div>
+          </div>
+
+          <!-- Medications Card -->
+          <div id="medications-card" class="card" style="display:none; margin-bottom:20px;">
+            <div class="card__title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                <path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/>
+              </svg>
+              Medications Detected
+            </div>
+            <div id="medications-tags" class="tags-container"></div>
+          </div>
+
+          <!-- Treatment Plan -->
+          <div class="card" style="margin-bottom:20px;">
+            <div class="card__title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+              </svg>
+              Treatment Plan
+            </div>
+            <div id="treatment-text" class="treatment-text"></div>
+          </div>
+
+          <!-- Progress Section (follow-up only) -->
+          <div id="progress-section" class="progress-section" style="margin-bottom:20px;">
+            <div class="card">
+              <div class="card__title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+                Treatment Progress
+              </div>
+
+              <div class="progress-header">
+                <span id="progress-badge" class="badge badge--stable">→ STABLE</span>
+                <div id="severity-delta-container" class="severity-delta" style="display:none;">
+                  <span>Previous</span>
+                  <span id="severity-prev" class="sev-value">—</span>
+                  <span class="sev-arrow">→</span>
+                  <span>Current</span>
+                  <span id="severity-curr" class="sev-value">—</span>
+                </div>
+              </div>
+
+              <div id="progress-narrative" class="narrative-card"></div>
+
+              <!-- Visual Similarity Panel -->
+              <div id="visual-similarity-panel" style="display:none; margin-top:16px;">
+                <div class="visual-sim-header">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                  Visual Image Comparison
+                  <span class="classifier-badge">BIOMEDCLIP</span>
+                </div>
+                <div class="visual-sim-body">
+                  <div class="visual-sim-row">
+                    <span class="visual-sim-label">Image Similarity</span>
+                    <span id="visual-sim-score" class="visual-sim-value">—</span>
+                  </div>
+                  <div class="visual-sim-track-wrap">
+                    <div class="visual-sim-track">
+                      <div id="visual-sim-bar" class="visual-sim-bar"></div>
+                    </div>
+                    <span id="visual-sim-change-label" class="visual-sim-change-tag">—</span>
+                  </div>
+                  <div id="visual-contradiction-box" class="visual-contradiction" style="display:none;"></div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Severity Trend Chart (shown when ≥ 2 encounters in condition chain) -->
+          <div id="trend-chart-section" class="card" style="display:none; margin-bottom:20px;">
+            <div class="card__title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+              Severity Trend
+              <span class="classifier-badge">OVER TIME</span>
+            </div>
+            <div class="trend-chart-wrapper">
+              <canvas id="trend-chart" height="160"></canvas>
+            </div>
+          </div>
+
+          <!-- Disclaimer -->
+          <div class="card card--elevated">
+            <p class="text-xs text-muted" style="line-height:1.7;">
+              <strong style="color: var(--text-muted);">⚕ Medical Disclaimer:</strong>
+              DermaAlpha provides AI-generated analysis for informational purposes only.
+              This is not a substitute for professional medical diagnosis, advice, or treatment.
+              Always consult a licensed dermatologist or healthcare provider regarding skin conditions.
+            </p>
+          </div>
+
+        </div><!-- /results-content -->
+      </main>
+
+      <!-- ── History Sidebar ─────────────────────────────────────────────── -->
+      <aside id="history-sidebar" class="history-sidebar collapsed" aria-label="Patient history">
+        <div class="history-sidebar-header">
+          <h3>Patient History</h3>
+          <button id="history-close-btn" class="btn btn--ghost btn--sm btn--icon"
+                  title="Close history">✕</button>
+        </div>
+        <ul id="history-list" class="history-list">
+          <div class="history-loading">
+            <span class="text-muted">Open to load history</span>
+          </div>
+        </ul>
+      </aside>
+
+    </div><!-- /results-layout -->
+  </div><!-- /screen-4 -->
+
+</div><!-- /app -->
+
+<!-- Toast container -->
+<div id="toast-container" class="toast-container"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

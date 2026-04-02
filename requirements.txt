@@ -1,0 +1,31 @@
+# ── LLM / Vision (HuggingFace) ────────────────────────────────────────────────
+huggingface_hub>=0.22.0
+Pillow>=10.3.0
+requests>=2.31.0
+
+# ── Vector Store ──────────────────────────────────────────────────────────────
+pinecone>=3.2.0
+
+# ── Embeddings ────────────────────────────────────────────────────────────────
+sentence-transformers>=2.7.0
+
+# ── CLI / UX ──────────────────────────────────────────────────────────────────
+rich>=13.7.0
+prompt_toolkit>=3.0.43
+
+# ── Web Framework ─────────────────────────────────────────────────────────────
+flask>=3.0.0
+werkzeug>=3.0.0
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+python-dotenv>=1.0.1
+
+# ── Data Validation ───────────────────────────────────────────────────────────
+pydantic>=2.7.0
+python-dateutil>=2.9.0
+
+# ── Optional: local model inference (uncomment if HF_INFERENCE_MODE=local) ────
+# torch>=2.3.0
+# transformers>=4.41.0
+# accelerate>=0.30.0
+# bitsandbytes>=0.43.0

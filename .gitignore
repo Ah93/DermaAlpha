@@ -1,0 +1,51 @@
+# Environment & secrets
+.env
+*.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Model cache
+.cache/
+*.bin
+*.pt
+*.safetensors
+
+# Image cache
+image_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Large dataset files
+*.zip
+*.tar.gz
+
+# Sample/test image folders
+Acne/
+
+# Claude Code local settings
+.claude/
+
+# Temp
+image_cache/
