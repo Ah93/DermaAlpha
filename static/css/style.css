@@ -1130,3 +1130,344 @@ body::before {
 #trend-chart {
   width: 100% !important;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   28. Avatar Doctor Panel
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Keyframes ─────────────────────────────────────────────────────────────── */
+@keyframes speaking-glow {
+  0%, 100% { box-shadow: 0 0 0 2px var(--primary), 0 0 18px rgba(59,130,246,0.35); }
+  50%       { box-shadow: 0 0 0 3px var(--accent),  0 0 32px rgba(14,165,233,0.6); }
+}
+/* CSS fallback mouth animation — subtle scale on the model-viewer element
+   when the GLB has no usable mouth morph targets */
+@keyframes mouth-pulse {
+  0%, 100% { transform: scaleY(1);    }
+  20%       { transform: scaleY(1.008) translateY(-0.5px); }
+  40%       { transform: scaleY(0.997); }
+  60%       { transform: scaleY(1.005) translateY(-0.3px); }
+  80%       { transform: scaleY(0.998); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+@keyframes wave-bar {
+  0%, 100% { transform: scaleY(0.25); }
+  50%       { transform: scaleY(1); }
+}
+@keyframes panel-slide-in {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Panel container ───────────────────────────────────────────────────────── */
+.avatar-panel {
+  position: fixed;
+  top: 84px;
+  right: 20px;
+  width: 260px;
+  z-index: 80;
+  background: var(--bg-secondary, #0a1628);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04);
+  animation: panel-slide-in 0.4s var(--ease-out, ease-out) both;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+/* Glow when speaking */
+.avatar-panel.avatar-speaking {
+  border-color: var(--accent, #0ea5e9);
+  animation: panel-slide-in 0s, speaking-glow 1.8s ease-in-out infinite;
+}
+
+/* Minimized state — only header visible */
+.avatar-panel.avatar-minimized {
+  border-radius: 12px;
+}
+
+/* ── Panel header ──────────────────────────────────────────────────────────── */
+.avatar-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-tertiary, #0e1f3a);
+  border-bottom: 1px solid var(--border, rgba(148,163,184,0.1));
+  gap: 8px;
+}
+
+.avatar-doc-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.avatar-doc-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary, #3b82f6), var(--accent, #0ea5e9));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-doc-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary, #e2e8f0);
+  line-height: 1.2;
+}
+
+.avatar-doc-role {
+  font-size: 10px;
+  color: var(--text-muted, #64748b);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.avatar-icon-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border, rgba(148,163,184,0.1));
+  border-radius: 6px;
+  color: var(--text-muted, #64748b);
+  cursor: pointer;
+  padding: 4px 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.avatar-icon-btn:hover {
+  background: var(--bg-primary, #060d1a);
+  color: var(--text-primary, #e2e8f0);
+}
+
+/* ── 3-D viewer wrapper ────────────────────────────────────────────────────── */
+.avatar-viewer-wrap {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  background: #0a1628;
+  transition: box-shadow 0.4s;
+}
+
+/* Glowing border on viewer while speaking */
+.avatar-panel.avatar-speaking .avatar-viewer-wrap {
+  box-shadow: inset 0 0 0 2px rgba(14,165,233,0.4);
+}
+
+/* ── CSS fallback: gentle mouth-pulse on model-viewer while speaking ───────── */
+.avatar-panel.avatar-speaking #avatar-viewer {
+  animation: mouth-pulse 0.38s ease-in-out infinite;
+  transform-origin: center 72%;   /* origin near the mouth region of the avatar */
+}
+
+/* ── Sound-wave bars ───────────────────────────────────────────────────────── */
+.avatar-wave-bars {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+}
+
+.avatar-wave-bars span {
+  display: block;
+  width: 4px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent, #0ea5e9);
+  transform-origin: bottom;
+  animation: wave-bar 0.7s ease-in-out infinite;
+}
+.avatar-wave-bars span:nth-child(1) { animation-delay: 0.00s; height: 10px; }
+.avatar-wave-bars span:nth-child(2) { animation-delay: 0.10s; height: 18px; }
+.avatar-wave-bars span:nth-child(3) { animation-delay: 0.20s; height: 24px; }
+.avatar-wave-bars span:nth-child(4) { animation-delay: 0.05s; height: 20px; }
+.avatar-wave-bars span:nth-child(5) { animation-delay: 0.15s; height: 24px; }
+.avatar-wave-bars span:nth-child(6) { animation-delay: 0.25s; height: 16px; }
+.avatar-wave-bars span:nth-child(7) { animation-delay: 0.08s; height: 10px; }
+
+/* ── Status row ("Now Speaking: Clinical Assessment") ─────────────────────── */
+.avatar-status-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #e2e8f0);
+  min-height: 28px;
+}
+
+.avatar-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted, #64748b);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.avatar-pulse-dot.active {
+  background: var(--accent, #0ea5e9);
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+#avatar-section-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted, #64748b);
+  font-weight: 500;
+  font-size: 11px;
+  transition: color 0.3s;
+}
+.avatar-panel.avatar-speaking #avatar-section-label {
+  color: var(--accent, #0ea5e9);
+  font-weight: 700;
+}
+
+/* ── Step indicators ───────────────────────────────────────────────────────── */
+.avatar-steps-row {
+  display: flex;
+  gap: 6px;
+  padding: 6px 12px 8px;
+  flex-direction: column;
+}
+
+.avatar-step-dot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  user-select: none;
+}
+.avatar-step-dot:hover { background: rgba(59,130,246,0.08); }
+
+.avatar-step-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.avatar-step-dot.pending .avatar-step-num {
+  background: transparent;
+  border: 1.5px solid rgba(148,163,184,0.25);
+  color: var(--text-muted, #64748b);
+}
+.avatar-step-dot.active .avatar-step-num {
+  background: var(--accent, #0ea5e9);
+  border-color: transparent;
+  color: #fff;
+}
+.avatar-step-dot.done .avatar-step-num {
+  background: rgba(16,185,129,0.2);
+  border-color: rgba(16,185,129,0.4);
+  color: #10b981;
+}
+.avatar-step-dot.done .avatar-step-num::after {
+  content: '✓';
+  font-size: 10px;
+}
+.avatar-step-dot.done .avatar-step-num { font-size: 0; }
+
+.avatar-step-lbl {
+  font-size: 11px;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+.avatar-step-dot.pending .avatar-step-lbl { color: var(--text-muted, #64748b); }
+.avatar-step-dot.active  .avatar-step-lbl { color: var(--accent, #0ea5e9); font-weight: 700; }
+.avatar-step-dot.done    .avatar-step-lbl { color: #10b981; }
+
+/* ── Playback controls ─────────────────────────────────────────────────────── */
+.avatar-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--border, rgba(148,163,184,0.08));
+}
+
+.avatar-ctrl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+.avatar-ctrl-btn:active { transform: scale(0.95); }
+
+.avatar-ctrl-btn--primary {
+  background: linear-gradient(135deg, var(--primary, #3b82f6), var(--accent, #0ea5e9));
+  color: #fff;
+  flex: 1;
+  justify-content: center;
+}
+.avatar-ctrl-btn--primary:hover {
+  box-shadow: 0 0 12px rgba(14,165,233,0.4);
+}
+
+.avatar-ctrl-btn--ghost {
+  background: var(--bg-tertiary, #0e1f3a);
+  color: var(--text-muted, #64748b);
+  border: 1px solid var(--border, rgba(148,163,184,0.1));
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.avatar-ctrl-btn--ghost:hover {
+  color: var(--text-primary, #e2e8f0);
+  background: var(--bg-primary, #060d1a);
+  border-color: rgba(148,163,184,0.25);
+}
+
+/* ── Responsive: smaller screens, anchor to bottom-right ──────────────────── */
+@media (max-width: 900px) {
+  .avatar-panel {
+    top: auto;
+    bottom: 80px;
+    right: 12px;
+    width: 240px;
+  }
+}
+@media (max-width: 600px) {
+  .avatar-panel {
+    right: 8px;
+    bottom: 12px;
+    width: 220px;
+  }
+  .avatar-viewer-wrap { height: 160px; }
+  model-viewer { height: 160px !important; }
+}

@@ -14,6 +14,8 @@
   <link rel="stylesheet" href="/static/css/style.css">
   <!-- Chart.js for severity trend chart -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- model-viewer for 3D GLB avatar -->
+  <script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
 </head>
 <body>
 
@@ -725,6 +727,98 @@
   </div><!-- /screen-4 -->
 
 </div><!-- /app -->
+
+<!-- ── Avatar Doctor Panel ─────────────────────────────────────────────────── -->
+<div id="avatar-panel" class="avatar-panel" style="display:none;" aria-label="Dr. Alpha AI Doctor">
+
+  <!-- Header bar -->
+  <div class="avatar-panel-header">
+    <div class="avatar-doc-info">
+      <div class="avatar-doc-icon">⚕</div>
+      <div>
+        <div class="avatar-doc-name">Dr. Alpha</div>
+        <div class="avatar-doc-role">AI Dermatology Assistant</div>
+      </div>
+    </div>
+    <button id="avatar-minimize-btn" class="avatar-icon-btn" title="Minimize panel">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Collapsible body -->
+  <div id="avatar-panel-body">
+
+    <!-- 3-D viewer -->
+    <div class="avatar-viewer-wrap" id="avatar-viewer-wrap">
+      <model-viewer
+        id="avatar-viewer"
+        src="/static/avatars/avatar_1F.glb"
+        camera-orbit="0deg 80deg 2m"
+        field-of-view="30deg"
+        shadow-intensity="0.8"
+        environment-image="neutral"
+        exposure="1.2"
+        interaction-prompt="none"
+        style="width:100%; height:220px; --poster-color:#0a1628; background:#0a1628;"
+      ></model-viewer>
+
+      <!-- model-viewer diagnostics — silent in production, visible in DevTools -->
+      <script>
+        (function() {
+          var mv = document.getElementById('avatar-viewer');
+          if (!mv) return;
+          mv.addEventListener('error', function(e) {
+            console.error('[DermaAlpha Avatar] model-viewer error:', e.detail);
+            document.getElementById('avatar-viewer-wrap').insertAdjacentHTML('beforeend',
+              '<div style="color:#f87171;font-size:11px;padding:6px 10px;position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.7);text-align:center;">Avatar unavailable</div>');
+          });
+          mv.addEventListener('load', function() {
+            console.log('[DermaAlpha Avatar] GLB loaded OK');
+          });
+        })();
+      </script>
+
+      <!-- Sound-wave overlay (visible while speaking) -->
+      <div class="avatar-wave-bars" id="avatar-wave-bars" style="display:none;">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <!-- "Now speaking" status row -->
+    <div class="avatar-status-row">
+      <div class="avatar-pulse-dot" id="avatar-pulse-dot"></div>
+      <span id="avatar-section-label">Ready to speak</span>
+    </div>
+
+    <!-- Section step indicators -->
+    <div class="avatar-steps-row" id="avatar-steps-row"></div>
+
+    <!-- Playback controls -->
+    <div class="avatar-controls">
+      <button id="avatar-play-btn"  class="avatar-ctrl-btn avatar-ctrl-btn--primary" title="Play all sections">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Play All
+      </button>
+      <button id="avatar-pause-btn" class="avatar-ctrl-btn avatar-ctrl-btn--primary" title="Pause" style="display:none;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        Pause
+      </button>
+      <button id="avatar-next-btn"  class="avatar-ctrl-btn avatar-ctrl-btn--ghost"   title="Skip to next section">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>
+        </svg>
+      </button>
+      <button id="avatar-stop-btn"  class="avatar-ctrl-btn avatar-ctrl-btn--ghost"   title="Stop">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="4" y="4" width="16" height="16" rx="2"/>
+        </svg>
+      </button>
+    </div>
+
+  </div><!-- /avatar-panel-body -->
+</div><!-- /avatar-panel -->
 
 <!-- Toast container -->
 <div id="toast-container" class="toast-container"></div>

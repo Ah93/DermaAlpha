@@ -320,7 +320,7 @@ function initScreen2() {
   });
 
   $('analyze-btn').addEventListener('click', handleAnalyzeBtn);
-  $('back-btn').addEventListener('click', () => showScreen(1));
+  $('back-btn').addEventListener('click', () => { hideAvatarPanel(); showScreen(1); });
 }
 
 // Drop Zone
@@ -538,6 +538,9 @@ function populateResults(data) {
 
   // Severity trend chart (new)
   renderTrendChart(data.condition_chain);
+
+  // Avatar doctor — queue sections for speech (runs after DOM is painted)
+  requestAnimationFrame(() => setupAvatarForResults(data));
 
   // Download report button (new)
   const dlBtn = $('download-report-btn');
@@ -1134,9 +1137,392 @@ function initScreen4() {
     if (dlBtn) dlBtn.style.display = 'none';
     if (AppState.trendChart) { AppState.trendChart.destroy(); AppState.trendChart = null; }
     resetIntake();
+    hideAvatarPanel();
     showScreen(2);
     updateConsultScreenForPatient();
   });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   AVATAR SPEAKER — Text-to-Speech controller for Dr. Alpha
+   Uses Web Speech API (built into every modern browser, no external dependency)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+const AvatarSpeaker = (() => {
+  const synth = ('speechSynthesis' in window) ? window.speechSynthesis : null;
+  let _sections   = [];
+  let _currentIdx = -1;
+  let _isPlaying  = false;
+  let _utterance  = null;
+
+  // ── Mouth morph target state ─────────────────────────────────────────────────
+  // model-viewer 3.x exposes mesh.morphTargetNames[] and
+  // mesh.setMorphTargetInfluenceByName(name, value 0-1) as public API.
+  let _mouthMesh    = null;   // model-viewer Mesh object
+  let _jawMorphName = null;   // e.g. "jawOpen", "mouthOpen", "viseme_aa"
+  let _mouthRaf     = null;   // requestAnimationFrame handle
+  let _mouthCssFallback = false; // true when no morph targets found
+
+  function _initMouthMorph() {
+    const mv = $('avatar-viewer');
+    if (!mv) return;
+    const onLoad = () => {
+      try {
+        const meshes = mv.model && mv.model.meshes ? mv.model.meshes : [];
+        for (const mesh of meshes) {
+          const names = mesh.morphTargetNames || [];
+          // Standard RPM / ARKit viseme names — any of these control the jaw
+          const jawName = names.find(n =>
+            /^(jawOpen|jaw_open|mouthOpen|mouth_open|viseme_aa|viseme_O|viseme_CH|Mouth_Open)$/i.test(n)
+          ) || names.find(n => /jaw|mouth.*open|open.*mouth/i.test(n));
+          if (jawName) {
+            _mouthMesh    = mesh;
+            _jawMorphName = jawName;
+            break;
+          }
+        }
+      } catch (e) {
+        // Model doesn't expose morphs — CSS fallback will handle it
+      }
+      // If no morph targets found, CSS animation is already defined and will activate
+      // via the avatar-speaking class on the panel
+      if (!_mouthMesh) _mouthCssFallback = true;
+    };
+    if (mv.loaded) { onLoad(); }
+    else           { mv.addEventListener('load', onLoad, { once: true }); }
+  }
+
+  function _startMouthAnim() {
+    if (_mouthCssFallback || !_mouthMesh || !_jawMorphName) return;
+    let t = 0;
+    function tick() {
+      t += 0.22;
+      // Natural speech rhythm: primary open/close at ~4 Hz with a secondary flutter
+      const base    = Math.max(0, Math.sin(t) * 0.55 + Math.sin(t * 2.3) * 0.18);
+      const flutter = Math.max(0, Math.sin(t * 5.7) * 0.08);
+      const value   = Math.min(1, (base + flutter) * 0.75);
+      try { _mouthMesh.setMorphTargetInfluenceByName(_jawMorphName, value); } catch (_) {}
+      _mouthRaf = requestAnimationFrame(tick);
+    }
+    _mouthRaf = requestAnimationFrame(tick);
+  }
+
+  function _stopMouthAnim() {
+    if (_mouthRaf) { cancelAnimationFrame(_mouthRaf); _mouthRaf = null; }
+    if (_mouthMesh && _jawMorphName) {
+      try { _mouthMesh.setMorphTargetInfluenceByName(_jawMorphName, 0); } catch (_) {}
+    }
+  }
+
+  // ── Internal helpers ────────────────────────────────────────────────────────
+
+  function _pickVoice() {
+    if (!synth) return null;
+    const voices = synth.getVoices();
+    return (
+      voices.find(v => v.lang === 'en-US' && /natural|neural|premium/i.test(v.name)) ||
+      voices.find(v => v.lang === 'en-US' && !v.localService) ||
+      voices.find(v => v.lang === 'en-US') ||
+      voices.find(v => v.lang.startsWith('en')) ||
+      null
+    );
+  }
+
+  function _updateUI() {
+    const panel = $('avatar-panel');
+    if (!panel) return;
+
+    // Speaking glow on panel (also drives CSS fallback mouth animation via this class)
+    panel.classList.toggle('avatar-speaking', _isPlaying);
+
+    // Wave bars
+    const wave = $('avatar-wave-bars');
+    const dot  = $('avatar-pulse-dot');
+    if (wave) wave.style.display = _isPlaying ? 'flex' : 'none';
+    if (dot)  dot.classList.toggle('active', _isPlaying);
+
+    // Mouth animation
+    if (_isPlaying) { _startMouthAnim(); }
+    else            { _stopMouthAnim(); }
+
+    // Section label
+    const label = $('avatar-section-label');
+    if (label) {
+      if (_isPlaying && _currentIdx >= 0 && _currentIdx < _sections.length) {
+        label.textContent = _sections[_currentIdx].title;
+      } else if (!_isPlaying && _currentIdx >= _sections.length && _sections.length > 0) {
+        label.textContent = 'All sections complete';
+      } else {
+        label.textContent = 'Ready to speak';
+      }
+    }
+
+    // Step dots
+    const stepsRow = $('avatar-steps-row');
+    if (stepsRow) {
+      stepsRow.querySelectorAll('.avatar-step-dot').forEach((dot, i) => {
+        dot.classList.toggle('active',  i === _currentIdx && _isPlaying);
+        dot.classList.toggle('done',    i < _currentIdx || (i === _currentIdx && !_isPlaying && _currentIdx >= _sections.length - 1 && _sections.length > 0));
+        dot.classList.toggle('pending', i > _currentIdx || (i === _currentIdx && !_isPlaying && _currentIdx < _sections.length));
+      });
+    }
+
+    // Play / Pause button swap
+    const playBtn  = $('avatar-play-btn');
+    const pauseBtn = $('avatar-pause-btn');
+    if (playBtn)  playBtn.style.display  = _isPlaying ? 'none'        : 'inline-flex';
+    if (pauseBtn) pauseBtn.style.display = _isPlaying ? 'inline-flex' : 'none';
+  }
+
+  function _buildStepDots() {
+    const stepsRow = $('avatar-steps-row');
+    if (!stepsRow) return;
+    stepsRow.innerHTML = '';
+    _sections.forEach((s, i) => {
+      const dot = document.createElement('div');
+      dot.className = 'avatar-step-dot pending';
+      dot.title = `Click to jump to: ${s.title}`;
+
+      const num = document.createElement('span');
+      num.className = 'avatar-step-num';
+      num.textContent = i + 1;
+
+      const lbl = document.createElement('span');
+      lbl.className = 'avatar-step-lbl';
+      lbl.textContent = s.title;
+
+      dot.appendChild(num);
+      dot.appendChild(lbl);
+
+      dot.addEventListener('click', () => {
+        synth && synth.cancel();
+        _currentIdx = i;
+        _isPlaying  = true;
+        _speakCurrent();
+      });
+
+      stepsRow.appendChild(dot);
+    });
+  }
+
+  function _speakCurrent() {
+    if (!synth) return;
+    if (_currentIdx < 0 || _currentIdx >= _sections.length) {
+      _isPlaying = false;
+      _updateUI();
+      return;
+    }
+
+    const section  = _sections[_currentIdx];
+    const fullText = `Section ${_currentIdx + 1}: ${section.title}. ${section.text}`;
+
+    synth.cancel();
+    _utterance            = new SpeechSynthesisUtterance(fullText);
+    _utterance.rate       = 0.88;
+    _utterance.pitch      = 1.05;
+    _utterance.volume     = 1.0;
+
+    _utterance.onstart = () => { _isPlaying = true;  _updateUI(); };
+    _utterance.onerror = (e) => {
+      console.warn('[AvatarSpeaker] TTS error:', e.error);
+      _isPlaying = false;
+      _updateUI();
+    };
+    _utterance.onend = () => {
+      _currentIdx++;
+      if (_currentIdx < _sections.length) {
+        setTimeout(_speakCurrent, 700);   // brief pause between sections
+      } else {
+        _isPlaying = false;
+        _updateUI();
+      }
+    };
+
+    const go = () => {
+      const voice = _pickVoice();
+      if (voice) _utterance.voice = voice;
+      synth.speak(_utterance);
+    };
+
+    // Voices may not be loaded yet on first call
+    if (synth.getVoices().length === 0) {
+      synth.addEventListener('voiceschanged', function onVC() {
+        synth.removeEventListener('voiceschanged', onVC);
+        go();
+      });
+    } else {
+      go();
+    }
+  }
+
+  // ── Public API ───────────────────────────────────────────────────────────────
+
+  return {
+    isSupported() { return !!synth; },
+
+    /** Call once after the model-viewer element is in the DOM */
+    initMorph() { _initMouthMorph(); },
+
+    setSections(sections) {
+      synth && synth.cancel();
+      _sections   = sections || [];
+      _currentIdx = -1;
+      _isPlaying  = false;
+      _buildStepDots();
+      _updateUI();
+    },
+
+    play() {
+      if (!synth || _isPlaying) return;
+      if (_currentIdx < 0 || _currentIdx >= _sections.length) _currentIdx = 0;
+      _isPlaying = true;
+      _speakCurrent();
+    },
+
+    // "Pause" = cancel + remember position (more reliable cross-browser than synth.pause)
+    pause() {
+      if (!synth || !_isPlaying) return;
+      synth.cancel();
+      _isPlaying = false;
+      _updateUI();
+    },
+
+    next() {
+      if (!synth) return;
+      synth.cancel();
+      _currentIdx = (_currentIdx < 0) ? 0 : _currentIdx + 1;
+      if (_currentIdx >= _sections.length) {
+        _currentIdx = _sections.length;
+        _isPlaying  = false;
+        _updateUI();
+        return;
+      }
+      _isPlaying = true;
+      _speakCurrent();
+    },
+
+    stop() {
+      if (!synth) return;
+      synth.cancel();
+      _currentIdx = -1;
+      _isPlaying  = false;
+      _updateUI();
+    },
+  };
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Avatar — set up sections from rendered results and show panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function setupAvatarForResults(data) {
+  if (!AvatarSpeaker.isSupported()) return;
+
+  // ── Extract rendered text from the DOM ─────────────────────────────────────
+
+  const getParasText = (id) =>
+    Array.from(($( id ) || document.createElement('div')).querySelectorAll('p'))
+         .map(p => p.textContent.trim()).filter(Boolean).join(' ');
+
+  const getListText = (id) =>
+    Array.from(($( id ) || document.createElement('div')).querySelectorAll('li, p'))
+         .map(el => el.textContent.trim()).filter(Boolean).join('. ');
+
+  // Clinical Assessment
+  const diagnosis     = ($('diagnosis-title')   || {}).textContent || data.diagnosis || '';
+  const sevLabel      = getSeverityLabel(data.severity_score);
+  const diffItems     = Array.from(($('differential-list') || document.createElement('ul')).querySelectorAll('li'))
+                            .map(li => li.textContent.trim()).filter(Boolean);
+  const clinicalText  = [
+    `Your primary diagnosis is: ${diagnosis}.`,
+    `The severity score is ${data.severity_score.toFixed(1)} out of 10, indicating a ${sevLabel} condition.`,
+    diffItems.length ? `Alternative diagnoses considered include: ${diffItems.join(', ')}.` : '',
+    data.urgent ? 'Important: this condition has been flagged as urgent. Please seek immediate medical attention.' : '',
+  ].filter(Boolean).join(' ');
+
+  // Full Assessment (narrative)
+  const narrativeText = getParasText('narrative-text') || data.narrative || 'Please see the full assessment on screen.';
+
+  // Treatment Plan
+  const treatmentText = getListText('treatment-text') || data.treatment_plan || 'Please consult your dermatologist for a personalised treatment plan.';
+
+  let sections;
+
+  if (data.is_first_encounter) {
+    // ── New Patient: Clinical Assessment → Full Assessment → Treatment Plan ──
+    sections = [
+      { title: 'Clinical Assessment', text: clinicalText },
+      { title: 'Full Assessment',     text: narrativeText },
+      { title: 'Treatment Plan',      text: treatmentText },
+    ];
+  } else {
+    // ── Returning Patient: Clinical Assessment → Treatment Progress → Treatment Plan ──
+    const progressText = [
+      data.progress ? `Treatment progress status: ${data.progress}.` : '',
+      (data.previous_severity != null)
+        ? `Severity has changed from ${parseFloat(data.previous_severity).toFixed(1)} to ${data.severity_score.toFixed(1)} out of 10.`
+        : '',
+      getParasText('progress-narrative') || data.progress_note || '',
+    ].filter(Boolean).join(' ');
+
+    sections = [
+      { title: 'Clinical Assessment', text: clinicalText },
+      { title: 'Treatment Progress',  text: progressText },
+      { title: 'Treatment Plan',      text: treatmentText },
+    ];
+  }
+
+  // ── Show panel ─────────────────────────────────────────────────────────────
+  const panel = $('avatar-panel');
+  if (panel) {
+    const body = $('avatar-panel-body');
+    panel.classList.remove('avatar-minimized');
+    if (body) body.style.display = '';
+    panel.style.display = 'block';
+  }
+
+  AvatarSpeaker.setSections(sections);
+}
+
+function hideAvatarPanel() {
+  AvatarSpeaker.stop();
+  const panel = $('avatar-panel');
+  if (panel) panel.style.display = 'none';
+}
+
+function initAvatarPanel() {
+  if (!AvatarSpeaker.isSupported()) return;
+
+  // Initialise mouth morph-target detection as soon as the GLB loads
+  AvatarSpeaker.initMorph();
+
+  const playBtn  = $('avatar-play-btn');
+  const pauseBtn = $('avatar-pause-btn');
+  const nextBtn  = $('avatar-next-btn');
+  const stopBtn  = $('avatar-stop-btn');
+  const minBtn   = $('avatar-minimize-btn');
+
+  if (playBtn)  playBtn.addEventListener('click',  () => AvatarSpeaker.play());
+  if (pauseBtn) pauseBtn.addEventListener('click', () => AvatarSpeaker.pause());
+  if (nextBtn)  nextBtn.addEventListener('click',  () => AvatarSpeaker.next());
+  if (stopBtn)  stopBtn.addEventListener('click',  () => AvatarSpeaker.stop());
+
+  if (minBtn) {
+    minBtn.addEventListener('click', () => {
+      const panel = $('avatar-panel');
+      const body  = $('avatar-panel-body');
+      const isMin = panel.classList.toggle('avatar-minimized');
+      if (body) body.style.display = isMin ? 'none' : '';
+      minBtn.title = isMin ? 'Expand panel' : 'Minimize panel';
+      minBtn.innerHTML = isMin
+        ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+             <polyline points="18 15 12 9 6 15"/>
+           </svg>`
+        : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+             <line x1="5" y1="12" x2="19" y2="12"/>
+           </svg>`;
+    });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1148,5 +1534,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initScreen2();
   initHistorySidebar();
   initScreen4();
+  initAvatarPanel();
   showScreen(1);
 });

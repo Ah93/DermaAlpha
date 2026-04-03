@@ -404,23 +404,49 @@ def download_report(patient_id, encounter_id):
         from utils.report_generator import generate_encounter_pdf
         import io as _io
 
+        # Split stored diagnosis_summary back into clean diagnosis + narrative
+        # Stored format: "Diagnosis Name. raw_text_excerpt..."
+        diag_summary = enc.diagnosis_summary or ""
+        dot_idx = diag_summary.find(". ")
+        if dot_idx > 0 and dot_idx < 120:
+            clean_diagnosis = diag_summary[:dot_idx]
+            narrative_text  = diag_summary[dot_idx + 2:]
+        else:
+            clean_diagnosis = diag_summary[:120]
+            narrative_text  = diag_summary
+
+        # For follow-up visits fetch the previous encounter to derive progress
+        previous_severity = None
+        progress_label    = "stable"
+        if not enc.is_first_encounter and enc.follow_up_of:
+            prev_enc = memory.get_encounter_by_id(patient_id, enc.follow_up_of)
+            if prev_enc:
+                previous_severity = prev_enc.severity_score
+                delta = enc.severity_score - prev_enc.severity_score
+                if delta < -0.5:
+                    progress_label = "improving"
+                elif delta > 0.5:
+                    progress_label = "worsening"
+
         # Build the data dict the generator expects
         report_data = {
-            "patient_id":        enc.patient_id,
-            "encounter_id":      enc.encounter_id,
-            "encounter_date":    enc.encounter_date,
-            "diagnosis":         enc.diagnosis_summary[:200],
-            "differential":      [],
-            "severity_score":    enc.severity_score,
-            "body_region":       enc.body_region,
-            "condition_tags":    enc.condition_tags,
-            "treatment_plan":    enc.treatment_plan,
-            "medications":       enc.drug_tags,
-            "narrative":         enc.diagnosis_summary,
+            "patient_id":         enc.patient_id,
+            "encounter_id":       enc.encounter_id,
+            "encounter_date":     enc.encounter_date,
+            "chief_complaint":    enc.chief_complaint,
+            "diagnosis":          clean_diagnosis,
+            "differential":       [],
+            "severity_score":     enc.severity_score,
+            "body_region":        enc.body_region,
+            "condition_tags":     enc.condition_tags,
+            "treatment_plan":     enc.treatment_plan,
+            "medications":        enc.drug_tags,
+            "narrative":          narrative_text,
             "is_first_encounter": enc.is_first_encounter,
-            "progress":          "first_encounter" if enc.is_first_encounter else "stable",
-            "progress_note":     "",
-            "previous_severity": None,
+            "progress":           progress_label,
+            "progress_note":      narrative_text if not enc.is_first_encounter else "",
+            "previous_severity":  previous_severity,
+            "lesion_classification": None,
         }
 
         pdf_bytes = generate_encounter_pdf(report_data)
