@@ -299,7 +299,14 @@ def analyze():
         elif "```" in narrative:
             narrative = narrative[: narrative.rindex("```")].strip()
 
-        # Build condition chain + append current encounter so chart includes today
+        # Build condition chain + append current encounter so chart includes today.
+        # If tag-matched chain is empty (different diagnosis), fall back to all past encounters
+        chain_source = condition_chain if condition_chain else (past_encounters if not is_first_encounter else [])
+        # Always include latest_encounter if not already in chain_source
+        chain_ids = {enc.encounter_id for enc in chain_source}
+        if not is_first_encounter and latest_encounter and latest_encounter.encounter_id not in chain_ids:
+            chain_source = list(chain_source) + [latest_encounter]
+
         chain_for_chart = [
             {
                 "encounter_id": enc.encounter_id,
@@ -309,7 +316,7 @@ def analyze():
                 "body_region": enc.body_region,
                 "diagnosis": enc.diagnosis_summary[:150],
             }
-            for enc in condition_chain
+            for enc in chain_source
         ]
         # Append current encounter at end (not yet in Pinecone at query time)
         chain_for_chart.append({
@@ -504,6 +511,49 @@ def history(patient_id):
             ],
         }
     )
+
+
+# ── Edge TTS endpoint ─────────────────────────────────────────────────────────
+
+@app.route("/api/tts", methods=["POST"])
+def tts():
+    """
+    Generate speech audio using Edge TTS (Microsoft Neural voices).
+    POST { "text": "...", "voice": "en-US-GuyNeural" }
+    Returns: audio/mpeg stream
+    """
+    import asyncio
+    import io
+    import edge_tts
+
+    body  = request.get_json(force=True, silent=True) or {}
+    text  = (body.get("text") or "").strip()
+    voice = body.get("voice") or "en-US-GuyNeural"
+
+    if not text:
+        return jsonify({"error": "text is required"}), 400
+
+    try:
+        async def _synthesise():
+            communicate = edge_tts.Communicate(text, voice)
+            buf = io.BytesIO()
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    buf.write(chunk["data"])
+            buf.seek(0)
+            return buf
+
+        audio_buf = asyncio.run(_synthesise())
+
+        return send_file(
+            audio_buf,
+            mimetype="audio/mpeg",
+            as_attachment=False,
+            download_name="speech.mp3",
+        )
+    except Exception as e:
+        logger.exception("Edge TTS failed")
+        return jsonify({"error": "TTS failed", "detail": str(e)}), 500
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

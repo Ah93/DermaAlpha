@@ -110,13 +110,6 @@
         </div>
       </div>
 
-      <!-- Feature pills -->
-      <div class="welcome-features">
-        <div class="feature-pill"><span class="dot"></span> Image Analysis</div>
-        <div class="feature-pill"><span class="dot"></span> Medical History</div>
-        <div class="feature-pill"><span class="dot"></span> Progress Tracking</div>
-        <div class="feature-pill"><span class="dot"></span> Treatment Plans</div>
-      </div>
 
       <p class="disclaimer">
         DermaAlpha is an AI-assisted tool and does not replace a licensed dermatologist.
@@ -136,14 +129,13 @@
         <div style="display:flex; align-items:center; justify-content:space-between;
                     margin-bottom: 28px; flex-wrap: wrap; gap: 12px;">
           <div>
-            <h2 style="font-size:22px; font-weight:700; margin-bottom:4px;">New Consultation</h2>
+            <h2 id="consult-title" style="font-size:22px; font-weight:700; margin-bottom:4px;">New Consultation</h2>
             <p id="consult-subtitle" class="text-muted text-sm">Please provide your details below.</p>
           </div>
           <button id="back-btn" class="btn btn--ghost btn--sm">← Back</button>
         </div>
 
         <div class="consult-grid">
-
           <!-- LEFT: Image Upload -->
           <div class="stack">
             <div class="card">
@@ -754,14 +746,15 @@
     <div class="avatar-viewer-wrap" id="avatar-viewer-wrap">
       <model-viewer
         id="avatar-viewer"
-        src="/static/avatars/avatar_1F.glb"
-        camera-orbit="0deg 80deg 2m"
-        field-of-view="30deg"
+        src="/static/avatars/avatar-man.glb"
+        camera-orbit="0deg 83deg 1.8m"
+        camera-target="0m 1.55m 0m"
+        field-of-view="22deg"
         shadow-intensity="0.8"
         environment-image="neutral"
         exposure="1.2"
         interaction-prompt="none"
-        style="width:100%; height:220px; --poster-color:#0a1628; background:#0a1628;"
+        style="width:100%; height:260px; --poster-color:#0a1628; background:#0a1628;"
       ></model-viewer>
 
       <!-- model-viewer diagnostics — silent in production, visible in DevTools -->
@@ -799,7 +792,7 @@
     <div class="avatar-controls">
       <button id="avatar-play-btn"  class="avatar-ctrl-btn avatar-ctrl-btn--primary" title="Play all sections">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        Play All
+        Replay All
       </button>
       <button id="avatar-pause-btn" class="avatar-ctrl-btn avatar-ctrl-btn--primary" title="Pause" style="display:none;">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>

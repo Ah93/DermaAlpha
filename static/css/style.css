@@ -1257,7 +1257,7 @@ body::before {
 .avatar-viewer-wrap {
   position: relative;
   width: 100%;
-  height: 220px;
+  height: 260px;
   background: #0a1628;
   transition: box-shadow 0.4s;
 }
@@ -1265,6 +1265,19 @@ body::before {
 /* Glowing border on viewer while speaking */
 .avatar-panel.avatar-speaking .avatar-viewer-wrap {
   box-shadow: inset 0 0 0 2px rgba(14,165,233,0.4);
+}
+
+/* Gradient fade at bottom — hides hands/jeans naturally */
+.avatar-viewer-wrap::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 130px;
+  background: linear-gradient(to bottom, transparent 0%, #0a1628 60%);
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* ── CSS fallback: gentle mouth-pulse on model-viewer while speaking ───────── */

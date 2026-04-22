@@ -199,12 +199,15 @@ async function handleBeginBtn() {
 
 function updateConsultScreenForPatient() {
   const subtitle    = $('consult-subtitle');
+  const title       = $('consult-title');
   const historyWrap = $('history-accordion-wrapper');
 
   if (AppState.isFirstEncounter) {
+    title.textContent = 'New Consultation';
     subtitle.textContent = 'New Patient — Describe your condition and complete the intake below for a more accurate assessment.';
     historyWrap.style.display = 'block';
   } else {
+    title.textContent = 'Follow-Up Visit';
     subtitle.textContent = `Welcome back, ${AppState.patientId} — describe your current condition and we will compare it with your previous visits.`;
     historyWrap.style.display = 'none';
     $('medical-history-textarea').value = '';
@@ -319,7 +322,10 @@ function initScreen2() {
     $('complaint-char-count').textContent = `${len} / 1000`;
   });
 
-  $('analyze-btn').addEventListener('click', handleAnalyzeBtn);
+  $('analyze-btn').addEventListener('click', () => {
+    AvatarSpeaker.unlockAudio();   // unlock audio context on real user gesture
+    handleAnalyzeBtn();
+  });
   $('back-btn').addEventListener('click', () => { hideAvatarPanel(); showScreen(1); });
 }
 
@@ -1149,59 +1155,22 @@ function initScreen4() {
    ══════════════════════════════════════════════════════════════════════════════ */
 
 const AvatarSpeaker = (() => {
-  const synth = ('speechSynthesis' in window) ? window.speechSynthesis : null;
+  // ── State ────────────────────────────────────────────────────────────────────
   let _sections   = [];
   let _currentIdx = -1;
   let _isPlaying  = false;
-  let _utterance  = null;
+  let _audio      = null;   // current HTMLAudioElement
+  let _aborted    = false;  // set true on stop/pause to prevent auto-advance
+  let _cache      = {};     // pre-fetched blob URLs keyed by section index
+  let _unlocked   = false;  // true after user gesture unlocked audio
 
-  // ── Mouth morph target state ─────────────────────────────────────────────────
-  // model-viewer 3.x exposes mesh.morphTargetNames[] and
-  // mesh.setMorphTargetInfluenceByName(name, value 0-1) as public API.
-  let _mouthMesh    = null;   // model-viewer Mesh object
-  let _jawMorphName = null;   // e.g. "jawOpen", "mouthOpen", "viseme_aa"
-  let _mouthRaf     = null;   // requestAnimationFrame handle
-  let _mouthCssFallback = false; // true when no morph targets found
-
-  function _initMouthMorph() {
-    const mv = $('avatar-viewer');
-    if (!mv) return;
-    const onLoad = () => {
-      try {
-        const meshes = mv.model && mv.model.meshes ? mv.model.meshes : [];
-        for (const mesh of meshes) {
-          const names = mesh.morphTargetNames || [];
-          // Standard RPM / ARKit viseme names — any of these control the jaw
-          const jawName = names.find(n =>
-            /^(jawOpen|jaw_open|mouthOpen|mouth_open|viseme_aa|viseme_O|viseme_CH|Mouth_Open)$/i.test(n)
-          ) || names.find(n => /jaw|mouth.*open|open.*mouth/i.test(n));
-          if (jawName) {
-            _mouthMesh    = mesh;
-            _jawMorphName = jawName;
-            break;
-          }
-        }
-      } catch (e) {
-        // Model doesn't expose morphs — CSS fallback will handle it
-      }
-      // If no morph targets found, CSS animation is already defined and will activate
-      // via the avatar-speaking class on the panel
-      if (!_mouthMesh) _mouthCssFallback = true;
-    };
-    if (mv.loaded) { onLoad(); }
-    else           { mv.addEventListener('load', onLoad, { once: true }); }
-  }
+  // ── Mouth morph (CSS fallback since Streamoji has no blend shapes) ───────────
+  let _mouthRaf = null;
 
   function _startMouthAnim() {
-    if (_mouthCssFallback || !_mouthMesh || !_jawMorphName) return;
     let t = 0;
     function tick() {
       t += 0.22;
-      // Natural speech rhythm: primary open/close at ~4 Hz with a secondary flutter
-      const base    = Math.max(0, Math.sin(t) * 0.55 + Math.sin(t * 2.3) * 0.18);
-      const flutter = Math.max(0, Math.sin(t * 5.7) * 0.08);
-      const value   = Math.min(1, (base + flutter) * 0.75);
-      try { _mouthMesh.setMorphTargetInfluenceByName(_jawMorphName, value); } catch (_) {}
       _mouthRaf = requestAnimationFrame(tick);
     }
     _mouthRaf = requestAnimationFrame(tick);
@@ -1209,41 +1178,22 @@ const AvatarSpeaker = (() => {
 
   function _stopMouthAnim() {
     if (_mouthRaf) { cancelAnimationFrame(_mouthRaf); _mouthRaf = null; }
-    if (_mouthMesh && _jawMorphName) {
-      try { _mouthMesh.setMorphTargetInfluenceByName(_jawMorphName, 0); } catch (_) {}
-    }
   }
 
-  // ── Internal helpers ────────────────────────────────────────────────────────
-
-  function _pickVoice() {
-    if (!synth) return null;
-    const voices = synth.getVoices();
-    return (
-      voices.find(v => v.lang === 'en-US' && /natural|neural|premium/i.test(v.name)) ||
-      voices.find(v => v.lang === 'en-US' && !v.localService) ||
-      voices.find(v => v.lang === 'en-US') ||
-      voices.find(v => v.lang.startsWith('en')) ||
-      null
-    );
-  }
-
+  // ── UI update ────────────────────────────────────────────────────────────────
   function _updateUI() {
     const panel = $('avatar-panel');
     if (!panel) return;
 
-    // Speaking glow on panel (also drives CSS fallback mouth animation via this class)
     panel.classList.toggle('avatar-speaking', _isPlaying);
 
-    // Wave bars
     const wave = $('avatar-wave-bars');
     const dot  = $('avatar-pulse-dot');
     if (wave) wave.style.display = _isPlaying ? 'flex' : 'none';
     if (dot)  dot.classList.toggle('active', _isPlaying);
 
-    // Mouth animation
     if (_isPlaying) { _startMouthAnim(); }
-    else            { _stopMouthAnim(); }
+    else            { _stopMouthAnim();  }
 
     // Section label
     const label = $('avatar-section-label');
@@ -1274,6 +1224,7 @@ const AvatarSpeaker = (() => {
     if (pauseBtn) pauseBtn.style.display = _isPlaying ? 'inline-flex' : 'none';
   }
 
+  // ── Step dots builder ────────────────────────────────────────────────────────
   function _buildStepDots() {
     const stepsRow = $('avatar-steps-row');
     if (!stepsRow) return;
@@ -1281,7 +1232,7 @@ const AvatarSpeaker = (() => {
     _sections.forEach((s, i) => {
       const dot = document.createElement('div');
       dot.className = 'avatar-step-dot pending';
-      dot.title = `Click to jump to: ${s.title}`;
+      dot.title = `Jump to: ${s.title}`;
 
       const num = document.createElement('span');
       num.className = 'avatar-step-num';
@@ -1295,8 +1246,9 @@ const AvatarSpeaker = (() => {
       dot.appendChild(lbl);
 
       dot.addEventListener('click', () => {
-        synth && synth.cancel();
+        _stopAudio();
         _currentIdx = i;
+        _aborted    = false;
         _isPlaying  = true;
         _speakCurrent();
       });
@@ -1305,107 +1257,178 @@ const AvatarSpeaker = (() => {
     });
   }
 
-  function _speakCurrent() {
-    if (!synth) return;
+  // ── Audio helpers ────────────────────────────────────────────────────────────
+  function _stopAudio() {
+    if (_audio) {
+      _audio.pause();
+      _audio.src = '';
+      _audio = null;
+    }
+  }
+
+  function _clearCache() {
+    Object.values(_cache).forEach(url => URL.revokeObjectURL(url));
+    _cache = {};
+  }
+
+  async function _fetchSection(i) {
+    if (_cache[i]) return;
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: _sections[i].text, voice: 'en-US-GuyNeural' }),
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        _cache[i] = URL.createObjectURL(blob);
+      }
+    } catch (_) {}
+  }
+
+  // Fetch section 0 first, auto-play it, then fetch rest in background
+  async function _prefetchAll() {
+    _clearCache();
+    if (!_sections.length) return;
+
+    // Fetch section 0 immediately and auto-play as soon as it's ready
+    await _fetchSection(0);
+    if (!_aborted && _unlocked) {
+      _currentIdx = 0;
+      _isPlaying  = true;
+      _speakCurrent();
+    }
+
+    // Fetch remaining sections in background while section 0 plays
+    for (let i = 1; i < _sections.length; i++) {
+      await _fetchSection(i);
+    }
+  }
+
+  // ── Core: play from cache (must be called from a user gesture) ───────────────
+  async function _speakCurrent() {
     if (_currentIdx < 0 || _currentIdx >= _sections.length) {
       _isPlaying = false;
       _updateUI();
       return;
     }
 
-    const section  = _sections[_currentIdx];
-    const fullText = `Section ${_currentIdx + 1}: ${section.title}. ${section.text}`;
+    _isPlaying = true;
+    _updateUI();
 
-    synth.cancel();
-    _utterance            = new SpeechSynthesisUtterance(fullText);
-    _utterance.rate       = 0.88;
-    _utterance.pitch      = 1.05;
-    _utterance.volume     = 1.0;
+    // If not cached yet, fetch now (user already clicked so gesture is active)
+    if (!_cache[_currentIdx]) {
+      const label = $('avatar-section-label');
+      if (label) label.textContent = `Loading…`;
+      try {
+        const res = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: _sections[_currentIdx].text,
+            voice: 'en-US-GuyNeural',
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        _cache[_currentIdx] = URL.createObjectURL(blob);
+      } catch (err) {
+        console.warn('[AvatarSpeaker] fetch error:', err.message);
+        _isPlaying = false;
+        _updateUI();
+        return;
+      }
+    }
 
-    _utterance.onstart = () => { _isPlaying = true;  _updateUI(); };
-    _utterance.onerror = (e) => {
-      console.warn('[AvatarSpeaker] TTS error:', e.error);
-      _isPlaying = false;
-      _updateUI();
-    };
-    _utterance.onend = () => {
+    if (_aborted) { _isPlaying = false; _updateUI(); return; }
+
+    _stopAudio();
+    _audio = new Audio(_cache[_currentIdx]);
+
+    _audio.onended = () => {
+      _audio = null;
+      if (_aborted) return;
       _currentIdx++;
       if (_currentIdx < _sections.length) {
-        setTimeout(_speakCurrent, 700);   // brief pause between sections
+        setTimeout(_speakCurrent, 400);
       } else {
         _isPlaying = false;
         _updateUI();
       }
     };
 
-    const go = () => {
-      const voice = _pickVoice();
-      if (voice) _utterance.voice = voice;
-      synth.speak(_utterance);
+    _audio.onerror = () => {
+      console.warn('[AvatarSpeaker] playback error');
+      _audio = null;
+      _isPlaying = false;
+      _updateUI();
     };
 
-    // Voices may not be loaded yet on first call
-    if (synth.getVoices().length === 0) {
-      synth.addEventListener('voiceschanged', function onVC() {
-        synth.removeEventListener('voiceschanged', onVC);
-        go();
-      });
-    } else {
-      go();
-    }
+    _audio.play().catch(err => {
+      console.warn('[AvatarSpeaker] play() blocked:', err.message);
+      _isPlaying = false;
+      _updateUI();
+    });
   }
 
   // ── Public API ───────────────────────────────────────────────────────────────
-
   return {
-    isSupported() { return !!synth; },
+    isSupported() { return true; },
 
-    /** Call once after the model-viewer element is in the DOM */
-    initMorph() { _initMouthMorph(); },
+    initMorph() {},   // no-op — kept for call-site compatibility
+
+    /** Call from any real user gesture (e.g. Analyze button click) to unlock audio */
+    unlockAudio() {
+      _unlocked = true;
+    },
 
     setSections(sections) {
-      synth && synth.cancel();
+      _stopAudio();
       _sections   = sections || [];
       _currentIdx = -1;
       _isPlaying  = false;
+      _aborted    = false;
       _buildStepDots();
       _updateUI();
+      // Pre-fetch all audio in background so Play button responds instantly
+      _prefetchAll();
     },
 
     play() {
-      if (!synth || _isPlaying) return;
+      if (_isPlaying) return;
       if (_currentIdx < 0 || _currentIdx >= _sections.length) _currentIdx = 0;
+      _aborted   = false;
       _isPlaying = true;
       _speakCurrent();
     },
 
-    // "Pause" = cancel + remember position (more reliable cross-browser than synth.pause)
     pause() {
-      if (!synth || !_isPlaying) return;
-      synth.cancel();
+      _aborted   = true;
       _isPlaying = false;
+      _stopAudio();
       _updateUI();
     },
 
     next() {
-      if (!synth) return;
-      synth.cancel();
+      _stopAudio();
       _currentIdx = (_currentIdx < 0) ? 0 : _currentIdx + 1;
       if (_currentIdx >= _sections.length) {
         _currentIdx = _sections.length;
         _isPlaying  = false;
+        _aborted    = true;
         _updateUI();
         return;
       }
+      _aborted   = false;
       _isPlaying = true;
       _speakCurrent();
     },
 
     stop() {
-      if (!synth) return;
-      synth.cancel();
-      _currentIdx = -1;
+      _aborted    = true;
       _isPlaying  = false;
+      _currentIdx = -1;
+      _stopAudio();
       _updateUI();
     },
   };
@@ -1428,47 +1451,103 @@ function setupAvatarForResults(data) {
     Array.from(($( id ) || document.createElement('div')).querySelectorAll('li, p'))
          .map(el => el.textContent.trim()).filter(Boolean).join('. ');
 
-  // Clinical Assessment
-  const diagnosis     = ($('diagnosis-title')   || {}).textContent || data.diagnosis || '';
-  const sevLabel      = getSeverityLabel(data.severity_score);
-  const diffItems     = Array.from(($('differential-list') || document.createElement('ul')).querySelectorAll('li'))
-                            .map(li => li.textContent.trim()).filter(Boolean);
-  const clinicalText  = [
-    `Your primary diagnosis is: ${diagnosis}.`,
-    `The severity score is ${data.severity_score.toFixed(1)} out of 10, indicating a ${sevLabel} condition.`,
-    diffItems.length ? `Alternative diagnoses considered include: ${diffItems.join(', ')}.` : '',
-    data.urgent ? 'Important: this condition has been flagged as urgent. Please seek immediate medical attention.' : '',
-  ].filter(Boolean).join(' ');
+  // ── Raw content from DOM ───────────────────────────────────────────────────
+  const diagnosis  = ($('diagnosis-title') || {}).textContent || data.diagnosis || '';
+  const sevLabel   = getSeverityLabel(data.severity_score);
+  const sevScore   = data.severity_score.toFixed(1);
+  const diffItems  = Array.from(
+    ($('differential-list') || document.createElement('ul')).querySelectorAll('li')
+  ).map(li => li.textContent.trim()).filter(Boolean);
 
-  // Full Assessment (narrative)
-  const narrativeText = getParasText('narrative-text') || data.narrative || 'Please see the full assessment on screen.';
+  const narrativeText = getParasText('narrative-text') || data.narrative || '';
+  const treatmentText = getListText('treatment-text')  || data.treatment_plan || '';
 
-  // Treatment Plan
-  const treatmentText = getListText('treatment-text') || data.treatment_plan || 'Please consult your dermatologist for a personalised treatment plan.';
+  // ── Shared helpers ─────────────────────────────────────────────────────────
+  const urgentWarning = data.urgent
+    ? 'I do need to flag something important — this condition has been marked as urgent. Please seek medical attention as soon as possible, and do not delay.'
+    : '';
+
+  const diffLine = diffItems.length
+    ? `Other conditions I considered and ruled out include ${diffItems.join(', ')}.`
+    : '';
+
+  const treatmentOpener = data.is_first_encounter
+    ? `Alright, now for the most important part — what you should actually do about this. Here is the treatment plan I am recommending for you.`
+    : `Based on how things are progressing, here is the updated treatment plan I want you to follow.`;
+
+  const treatmentClosing = data.is_first_encounter
+    ? `Please follow this plan consistently. And while I can give you a thorough AI-powered assessment, always follow up with a licensed dermatologist for hands-on care. Take care of yourself!`
+    : `Stay consistent with this plan and we will continue monitoring your progress. You are doing great — keep it up!`;
 
   let sections;
 
   if (data.is_first_encounter) {
-    // ── New Patient: Clinical Assessment → Full Assessment → Treatment Plan ──
-    sections = [
-      { title: 'Clinical Assessment', text: clinicalText },
-      { title: 'Full Assessment',     text: narrativeText },
-      { title: 'Treatment Plan',      text: treatmentText },
-    ];
-  } else {
-    // ── Returning Patient: Clinical Assessment → Treatment Progress → Treatment Plan ──
-    const progressText = [
-      data.progress ? `Treatment progress status: ${data.progress}.` : '',
-      (data.previous_severity != null)
-        ? `Severity has changed from ${parseFloat(data.previous_severity).toFixed(1)} to ${data.severity_score.toFixed(1)} out of 10.`
-        : '',
-      getParasText('progress-narrative') || data.progress_note || '',
+    // ── New Patient: greeting → Clinical Assessment → Full Assessment → Treatment Plan ──
+
+    const clinicalSpeech = [
+      `Hey there! I am Dr. Alpha, your AI dermatology assistant.`,
+      `I have just finished analyzing your skin image and medical details, so let me walk you through what I found.`,
+      `Starting with the clinical picture — based on everything I reviewed, your primary diagnosis is ${diagnosis}.`,
+      `I would rate the severity at ${sevScore} out of 10, which places this in the ${sevLabel} range.`,
+      diffLine,
+      urgentWarning,
     ].filter(Boolean).join(' ');
 
+    const narrativeSpeech = narrativeText
+      ? `Now let me give you the full clinical picture. ${narrativeText}`
+      : `The full assessment details are available on your screen for review.`;
+
+    const treatmentSpeech = treatmentText
+      ? `${treatmentOpener} ${treatmentText} ${treatmentClosing}`
+      : `Please consult with a licensed dermatologist for a personalised treatment plan tailored to your specific needs.`;
+
     sections = [
-      { title: 'Clinical Assessment', text: clinicalText },
-      { title: 'Treatment Progress',  text: progressText },
-      { title: 'Treatment Plan',      text: treatmentText },
+      { title: 'Clinical Assessment', text: clinicalSpeech  },
+      { title: 'Full Assessment',     text: narrativeSpeech },
+      { title: 'Treatment Plan',      text: treatmentSpeech },
+    ];
+
+  } else {
+    // ── Returning Patient: greeting → Clinical Assessment → Treatment Progress → Treatment Plan ──
+
+    const progress     = data.progress || 'stable';
+    const prevSev      = data.previous_severity != null
+      ? parseFloat(data.previous_severity).toFixed(1) : null;
+    const progressNote = getParasText('progress-narrative') || data.progress_note || '';
+
+    const progressLine = {
+      improving: `I am pleased to tell you — things are looking better.`,
+      worsening: `I want to be honest with you — there has been some worsening since your last visit, and we need to address that.`,
+      stable:    `Your condition has remained largely stable since your last visit.`,
+    }[progress] || `Your condition has remained largely stable since your last visit.`;
+
+    const deltaLine = prevSev
+      ? `Your severity score has moved from ${prevSev} to ${sevScore} out of 10.`
+      : '';
+
+    const clinicalSpeech = [
+      `Welcome back! I am Dr. Alpha.`,
+      `It is good to see you again. I have carefully compared today's visit with your previous one, so let me take you through the latest findings.`,
+      `Looking at your skin today — your current diagnosis remains ${diagnosis}, with a severity score of ${sevScore} out of 10, which is in the ${sevLabel} range.`,
+      diffLine,
+      urgentWarning,
+    ].filter(Boolean).join(' ');
+
+    const progressSpeech = [
+      `Now, here is what I really want you to pay attention to — how you have been progressing.`,
+      progressLine,
+      deltaLine,
+      progressNote || '',
+    ].filter(Boolean).join(' ');
+
+    const treatmentSpeech = treatmentText
+      ? `${treatmentOpener} ${treatmentText} ${treatmentClosing}`
+      : `Please continue following your existing treatment plan and consult your dermatologist if you have any concerns.`;
+
+    sections = [
+      { title: 'Clinical Assessment', text: clinicalSpeech  },
+      { title: 'Treatment Progress',  text: progressSpeech  },
+      { title: 'Treatment Plan',      text: treatmentSpeech },
     ];
   }
 
