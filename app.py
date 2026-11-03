@@ -189,6 +189,7 @@ def analyze():
                 past_encounters=past_encounters,
                 has_image=image_data_uri is not None,
                 classifier_result=lesion_classification,
+                latest_treatment=latest_encounter.treatment_plan if latest_encounter else None,
             )
 
         analysis = analyzer.analyze(prompt=prompt, image_data_uri=image_data_uri, max_new_tokens=4096)

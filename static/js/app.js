@@ -1195,6 +1195,12 @@ const AvatarSpeaker = (() => {
     if (_isPlaying) { _startMouthAnim(); }
     else            { _stopMouthAnim();  }
 
+    const vid = $('avatar-viewer');
+    if (vid && vid.tagName === 'VIDEO') {
+      if (_isPlaying) { vid.play().catch(() => {}); }
+      else            { vid.pause(); }
+    }
+
     // Section label
     const label = $('avatar-section-label');
     if (label) {

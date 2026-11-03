@@ -1253,37 +1253,50 @@ body::before {
   color: var(--text-primary, #e2e8f0);
 }
 
-/* ── 3-D viewer wrapper ────────────────────────────────────────────────────── */
+/* ── Avatar video wrapper ──────────────────────────────────────────────────── */
 .avatar-viewer-wrap {
   position: relative;
   width: 100%;
   height: 260px;
   background: #0a1628;
+  overflow: hidden;
   transition: box-shadow 0.4s;
 }
 
-/* Glowing border on viewer while speaking */
+/* Glowing border while speaking */
 .avatar-panel.avatar-speaking .avatar-viewer-wrap {
   box-shadow: inset 0 0 0 2px rgba(14,165,233,0.4);
 }
 
-/* Gradient fade at bottom — hides hands/jeans naturally */
+/* Video fills the wrapper */
+#avatar-viewer {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Gradient fade at bottom */
 .avatar-viewer-wrap::after {
   content: '';
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 130px;
-  background: linear-gradient(to bottom, transparent 0%, #0a1628 60%);
+  height: 80px;
+  background: linear-gradient(to bottom, transparent 0%, #0a1628 70%);
   pointer-events: none;
   z-index: 2;
 }
 
-/* ── CSS fallback: gentle mouth-pulse on model-viewer while speaking ───────── */
+/* Subtle brightness pulse on video while speaking */
 .avatar-panel.avatar-speaking #avatar-viewer {
-  animation: mouth-pulse 0.38s ease-in-out infinite;
-  transform-origin: center 72%;   /* origin near the mouth region of the avatar */
+  animation: vid-speaking-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes vid-speaking-pulse {
+  0%, 100% { filter: brightness(1); }
+  50%       { filter: brightness(1.08); }
 }
 
 /* ── Sound-wave bars ───────────────────────────────────────────────────────── */
@@ -1482,5 +1495,5 @@ body::before {
     width: 220px;
   }
   .avatar-viewer-wrap { height: 160px; }
-  model-viewer { height: 160px !important; }
+  #avatar-viewer { height: 160px; }
 }

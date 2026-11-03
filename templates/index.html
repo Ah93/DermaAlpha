@@ -14,8 +14,6 @@
   <link rel="stylesheet" href="/static/css/style.css">
   <!-- Chart.js for severity trend chart -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <!-- model-viewer for 3D GLB avatar -->
-  <script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
 </head>
 <body>
 
@@ -742,36 +740,15 @@
   <!-- Collapsible body -->
   <div id="avatar-panel-body">
 
-    <!-- 3-D viewer -->
+    <!-- Avatar video -->
     <div class="avatar-viewer-wrap" id="avatar-viewer-wrap">
-      <model-viewer
+      <video
         id="avatar-viewer"
-        src="/static/avatars/avatar-man.glb"
-        camera-orbit="0deg 83deg 1.8m"
-        camera-target="0m 1.55m 0m"
-        field-of-view="22deg"
-        shadow-intensity="0.8"
-        environment-image="neutral"
-        exposure="1.2"
-        interaction-prompt="none"
-        style="width:100%; height:260px; --poster-color:#0a1628; background:#0a1628;"
-      ></model-viewer>
-
-      <!-- model-viewer diagnostics — silent in production, visible in DevTools -->
-      <script>
-        (function() {
-          var mv = document.getElementById('avatar-viewer');
-          if (!mv) return;
-          mv.addEventListener('error', function(e) {
-            console.error('[DermaAlpha Avatar] model-viewer error:', e.detail);
-            document.getElementById('avatar-viewer-wrap').insertAdjacentHTML('beforeend',
-              '<div style="color:#f87171;font-size:11px;padding:6px 10px;position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.7);text-align:center;">Avatar unavailable</div>');
-          });
-          mv.addEventListener('load', function() {
-            console.log('[DermaAlpha Avatar] GLB loaded OK');
-          });
-        })();
-      </script>
+        src="/static/avatars/dr%20alpha.mp4"
+        loop
+        muted
+        playsinline
+      ></video>
 
       <!-- Sound-wave overlay (visible while speaking) -->
       <div class="avatar-wave-bars" id="avatar-wave-bars" style="display:none;">

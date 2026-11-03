@@ -44,6 +44,20 @@ Thumbs.db
 # Sample/test image folders
 Acne/
 
+# Research material kept local (paper drafts, reference PDFs, raw screenshots)
+/paper/
+/papers/
+/screenshots/
+/templates/template_work.dotx
+/arch1.png
+
+# Generated patient reports and test audio
+DermaAlpha_PT-*.pdf
+test_audio.mp3
+
+# Unused avatar assets
+static/avatars/dr alpha old.mp4
+
 # Claude Code local settings
 .claude/
 

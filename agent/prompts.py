@@ -78,6 +78,7 @@ Your role is to analyze skin conditions from patient-provided images and descrip
 provide thorough clinical assessments, and track patient progress over time.
 
 IMPORTANT GUIDELINES:
+- Begin your response directly with the clinical assessment — no greetings, no "Hello", no "Thank you", no preamble
 - Always be empathetic, clear, and informative
 - You are NOT a replacement for a licensed dermatologist; always recommend professional consultation
 - Flag urgent conditions (potential melanoma, severe infections, spreading cellulitis) prominently
@@ -148,17 +149,22 @@ PATIENT COMPLAINT (current visit):
 
 {image_note}
 
+── LAST PRESCRIBED TREATMENT (most recent visit) ────────────────────────────
+{latest_treatment}
+─────────────────────────────────────────────────────────────────────────────
+
 ── PAST ENCOUNTER HISTORY ───────────────────────────────────────────────────
 {history_block}
 ─────────────────────────────────────────────────────────────────────────────
 
 Please:
-1. Analyze the current skin condition
-2. Compare it explicitly to the most recent relevant encounter(s)
-3. Assess whether the condition is improving, worsening, or stable
-4. Evaluate treatment effectiveness based on the history
-5. Update or modify the treatment plan as needed
-6. End with the required JSON block (set "progress" to one of: improving/worsening/stable)
+1. Analyze the current skin condition from the image and complaint
+2. Explicitly evaluate whether the last prescribed treatment worked:
+   - If severity improved → confirm it is working, continue or taper as appropriate
+   - If severity worsened or unchanged → state the treatment failed and explain why
+   - Adjust or escalate the treatment plan accordingly
+3. Compare to the most recent encounter and assess progress direction
+4. End with the required JSON block (set "progress" to one of: improving/worsening/stable)
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -217,12 +223,23 @@ Body region changed    : {region_changed}
 
 {visual_evidence_block}
 
-Write a 3-4 sentence progress note that:
+── TREATMENT EFFECTIVENESS ASSESSMENT ───────────────────────────────────────
+Previous treatment: {previous_treatment}
+Severity went from {previous_severity}/10 → {current_severity}/10 ({severity_direction}, {severity_delta:+.2f} points)
+
+Explicitly assess:
+- Did the previous treatment work? (yes / partially / no — based on severity change)
+- If it failed or partially worked, what is the likely reason?
+- What is the updated recommendation? (continue / modify / escalate / switch)
+─────────────────────────────────────────────────────────────────────────────────
+
+Write a 4-5 sentence progress note that:
 1. States clearly whether the condition is {severity_direction} — cite the exact severity numbers
-2. References the visual similarity finding if an image was available
-3. If a CONTRADICTION was detected, flag it clearly and suggest the patient verify with a clinician
-4. Mentions resolved or new condition tags if clinically meaningful
-5. Uses plain, empathetic language a patient can understand
+2. Explicitly states whether the previous treatment worked or failed and why
+3. Gives a clear updated treatment recommendation based on effectiveness
+4. References the visual similarity finding if an image was available
+5. If a CONTRADICTION was detected, flag it clearly and suggest the patient verify with a clinician
+6. Uses plain, empathetic language a patient can understand
 
 Do NOT guess or re-derive numbers. Use only the pre-computed metrics above.
 """
@@ -303,6 +320,7 @@ def build_follow_up_prompt(
     past_encounters: list,
     has_image: bool,
     classifier_result: dict | None = None,
+    latest_treatment: str | None = None,
 ) -> str:
     image_note = (
         "An image of the current condition has been provided. Please analyze it carefully."
@@ -327,11 +345,13 @@ def build_follow_up_prompt(
 
     history_block = "\n".join(history_blocks) if history_blocks else "No relevant past encounters found."
     classifier_note = _classifier_note(classifier_result)
+    treatment_text = latest_treatment.strip()[:400] if latest_treatment else "None documented for previous visit."
 
     return FOLLOW_UP_PROMPT.format(
         complaint=complaint + classifier_note,
         image_note=image_note,
         history_block=history_block,
+        latest_treatment=treatment_text,
     )
 
 
